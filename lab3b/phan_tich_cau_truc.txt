@@ -1,0 +1,316 @@
+================================================================================
+PHÂN TÍCH CẤU TRÚC PARSER - LAB3B
+Compiler Design Lab 3B - Symbol Table Integration
+================================================================================
+
+I. TỔNG QUAN
+-------------
+Lab 3b tích hợp bảng ký hiệu (Symbol Table) vào bộ phân tích cú pháp (Parser).
+Parser không chỉ kiểm tra cú pháp mà còn xây dựng bảng ký hiệu với các đối 
+tượng được khai báo trong chương trình.
+
+II. CẤU TRÚC PARSER - THAY ĐỔI CHÍNH
+--------------------------------------
+
+1. LUỒNG PHÂN TÍCH CHƯƠNG TRÌNH
+   
+   compileProgram()
+   ├── Tạo và đăng ký Program Object
+   ├── Enter vào scope của program
+   ├── compileBlock()
+   │   ├── compileBlock()  - Xử lý CONST declarations
+   │   ├── compileBlock2() - Xử lý TYPE declarations  
+   │   ├── compileBlock3() - Xử lý VAR declarations
+   │   ├── compileBlock4() - Xử lý Function/Procedure declarations
+   │   └── compileBlock5() - Xử lý BEGIN...END statements
+   └── Exit khỏi scope của program
+
+2. PHÂN TÍCH CHI TIẾT CÁC BLOCK
+
+   A. compileBlock() - CONST Declarations
+      - Đọc từ khóa CONST
+      - Với mỗi khai báo hằng:
+        * Đọc tên hằng (TK_IDENT)
+        * Tạo Constant Object
+        * Đọc dấu '='
+        * Compile giá trị hằng số (compileConstant)
+        * Gán giá trị cho object->constAttrs->value
+        * Declare object vào symbol table
+        * Đọc dấu ';'
+      
+   B. compileBlock2() - TYPE Declarations  
+      - Đọc từ khóa TYPE
+      - Với mỗi khai báo kiểu:
+        * Đọc tên kiểu (TK_IDENT)
+        * Tạo Type Object
+        * Đọc dấu '='
+        * Compile type definition (compileType)
+        * Gán kiểu cho object->typeAttrs->actualType
+        * Declare object vào symbol table
+        * Đọc dấu ';'
+   
+   C. compileBlock3() - VAR Declarations
+      - Đọc từ khóa VAR
+      - Với mỗi khai báo biến:
+        * Đọc tên biến (TK_IDENT)
+        * Tạo Variable Object
+        * Đọc dấu ':'
+        * Compile type (compileType)
+        * Gán kiểu cho object->varAttrs->type
+        * Declare object vào symbol table
+        * Đọc dấu ';'
+   
+   D. compileBlock4() - Function/Procedure Declarations
+      - Gọi compileSubDecls()
+      - compileSubDecls() lặp qua:
+        * compileFuncDecl() - Khai báo function
+        * compileProcDecl() - Khai báo procedure
+   
+   E. compileBlock5() - Statements
+      - Đọc BEGIN
+      - Compile các statements
+      - Đọc END
+
+3. COMPILE FUNCTION DECLARATION
+
+   compileFuncDecl():
+   ├── Đọc KW_FUNCTION
+   ├── Đọc tên function (TK_IDENT)
+   ├── Tạo Function Object
+   ├── compileParams() - Xử lý tham số
+   │   └── Với mỗi parameter:
+   │       ├── Tạo Parameter Object
+   │       ├── Set kind (VALUE hoặc REFERENCE)
+   │       └── Declare vào scope của function
+   ├── Đọc dấu ':'
+   ├── Compile return type
+   ├── Gán returnType cho funcAttrs->returnType
+   ├── Đọc dấu ';'
+   ├── Declare function vào symbol table
+   ├── Enter vào scope của function
+   ├── compileBlock() - Compile thân function
+   ├── Exit khỏi scope của function
+   ├── Đọc dấu ';'
+
+4. COMPILE PROCEDURE DECLARATION
+
+   compileProcDecl():
+   ├── Đọc KW_PROCEDURE
+   ├── Đọc tên procedure (TK_IDENT)
+   ├── Tạo Procedure Object
+   ├── compileParams() - Xử lý tham số
+   │   └── Tương tự như function
+   ├── Đọc dấu ';'
+   ├── Declare procedure vào symbol table
+   ├── Enter vào scope của procedure
+   ├── compileBlock() - Compile thân procedure
+   ├── Exit khỏi scope của procedure
+   └── Đọc dấu ';'
+
+5. COMPILE PARAMETERS
+
+   compileParam():
+   - TK_IDENT: Parameter pass-by-value
+     * Đọc tên parameter
+     * Tạo Parameter Object với kind=PARAM_VALUE
+     * Đọc ':'
+     * Compile type (compileBasicType)
+     * Gán type cho paramAttrs->type
+     * Declare parameter
+   
+   - KW_VAR: Parameter pass-by-reference
+     * Đọc VAR
+     * Đọc tên parameter
+     * Tạo Parameter Object với kind=PARAM_REFERENCE
+     * Đọc ':'
+     * Compile type (compileBasicType)
+     * Gán type cho paramAttrs->type
+     * Declare parameter
+
+III. COMPILE TYPES VÀ CONSTANTS
+---------------------------------
+
+1. compileType()
+   - KW_INTEGER: Trả về intType
+   - KW_CHAR: Trả về charType
+   - KW_ARRAY: 
+     * Đọc ARRAY
+     * Đọc '['
+     * Đọc kích thước mảng (TK_NUMBER)
+     * Đọc ']'
+     * Đọc OF
+     * Compile element type (đệ quy)
+     * Trả về makeArrayType(arraySize, elementType)
+   - TK_IDENT:
+     * Lookup type đã được define trước đó
+     * Trả về duplicate của actualType
+
+2. compileBasicType()
+   - KW_INTEGER: Trả về duplicateType(intType)
+   - KW_CHAR: Trả về duplicateType(charType)
+
+3. compileConstant()
+   - SB_PLUS: Compile hằng dương
+   - SB_MINUS: Compile hằng âm (đảo dấu)
+   - TK_CHAR: Char constant
+   - Default: Compile constant2
+
+4. compileConstant2() và compileUnsignedConstant()
+   - TK_NUMBER: Tạo int constant với giá trị từ token
+   - TK_IDENT: Lookup constant object, duplicate value
+   - TK_CHAR: Tạo char constant với giá trị từ token
+
+IV. SYMBOL TABLE OPERATIONS
+-----------------------------
+
+1. Tạo Objects:
+   - createProgramObject(name)
+   - createConstantObject(name)
+   - createTypeObject(name)
+   - createVariableObject(name)
+   - createFunctionObject(name)
+   - createProcedureObject(name)
+   - createParameterObject(name, kind, owner)
+
+2. Quản lý Scope:
+   - enterBlock(scope): Set currentScope
+   - exitBlock(): currentScope = currentScope->outer
+   - createScope(owner, outer): Tạo scope mới
+
+3. Declare Object:
+   - declareObject(obj): Thêm object vào currentScope->objList
+   - Nếu là parameter: Thêm vào paramList của owner function/procedure
+
+4. Lookup Object:
+   - lookupObject(name): Tìm object trong scope hierarchy
+     * Tìm trong currentScope
+     * Nếu không có, tìm trong outer scopes
+     * Nếu không có, tìm trong globalObjectList
+     * Trả về NULL nếu không tìm thấy
+
+V. LUỒNG XỬ LÝ VÍ DỤ
+----------------------
+
+Example 2: Factorial
+Program Example2;
+Var n : Integer;
+
+Function F(n : Integer) : Integer;
+Begin
+  If n = 0 Then F := 1 Else F := N * F (N - 1);
+End;
+
+Begin
+  For n := 1 To 7 Do
+  Begin
+    Call WriteLn;
+    Call WriteI( F(n));
+  End;
+End.
+
+LUỒNG XỬ LÝ:
+1. compileProgram()
+   - Tạo Program "Example2"
+   - Enter program scope
+   
+2. compileBlock() -> compileBlock2() -> compileBlock3()
+   - Tạo Variable "n" : Integer
+   - Declare "n"
+   
+3. compileBlock4() -> compileSubDecls() -> compileFuncDecl()
+   - Tạo Function "F" : Integer
+   - Declare "F" vào program scope
+   - Enter function F scope
+   - compileParams():
+     * Tạo Parameter "n" : Integer (PARAM_VALUE)
+     * Declare "n" vào function F scope
+   - compileBlock() (thân function)
+   - Exit function F scope
+   
+4. compileBlock5()
+   - Compile BEGIN...END statements
+   
+5. Exit program scope
+
+KẾT QUẢ SYMBOL TABLE:
+Program EXAMPLE2
+    Var N : Int
+    Function F : Int
+        Param N : Int
+
+VI. DANH SÁCH TODO CẦN HOÀN THÀNH
+-----------------------------------
+
+1. compileProgram():
+   - Tạo program object từ token name
+   - Declare program object
+   - Enter vào program scope
+   - Sau khi compile block: Exit program scope
+
+2. compileBlock():
+   - Với mỗi CONST declaration:
+     * Tạo constant object
+     * Compile và gán constant value
+     * Declare constant object
+
+3. compileBlock2():
+   - Với mỗi TYPE declaration:
+     * Tạo type object
+     * Compile và gán actual type
+     * Declare type object
+
+4. compileBlock3():
+   - Với mỗi VAR declaration:
+     * Tạo variable object
+     * Compile và gán type
+     * Declare variable object
+
+5. compileFuncDecl():
+   - Tạo function object
+   - Compile return type và gán
+   - Declare function object
+   - Enter/Exit function scope
+
+6. compileProcDecl():
+   - Tạo procedure object
+   - Declare procedure object
+   - Enter/Exit procedure scope
+
+7. compileParam():
+   - Tạo parameter object với kind phù hợp
+   - Compile type và gán
+   - Declare parameter object
+
+8. compileType():
+   - Xử lý ARRAY type với arraySize và elementType
+   - Xử lý TK_IDENT: lookup và duplicate type
+   - Trả về type object
+
+9. compileBasicType():
+   - Trả về duplicate của intType hoặc charType
+
+10. compileConstant(), compileConstant2(), compileUnsignedConstant():
+    - Tạo constant value từ token
+    - Xử lý lookup constant đã define
+    - Xử lý dấu +/- cho constant
+
+11. lookupObject() trong symtab.c:
+    - Tìm kiếm trong scope hierarchy
+    - Tìm trong global object list
+
+================================================================================
+KẾT LUẬN
+================================================================================
+
+Parser trong lab3b đã được mở rộng để xây dựng Symbol Table đồng thời với 
+phân tích cú pháp. Mỗi khi gặp khai báo (CONST, TYPE, VAR, FUNCTION, PROCEDURE),
+parser tạo object tương ứng và đăng ký vào bảng ký hiệu. Scope được quản lý
+thông qua enterBlock/exitBlock để đảm bảo phạm vi của các objects.
+
+Các TODO functions cần:
+- Lưu token->string vào tên object
+- Gọi compile functions và lưu kết quả vào attributes
+- Gọi declareObject để đăng ký vào symbol table
+- Quản lý scope bằng enterBlock/exitBlock
+- Implement lookupObject để tìm kiếm objects trong scope hierarchy
+================================================================================
