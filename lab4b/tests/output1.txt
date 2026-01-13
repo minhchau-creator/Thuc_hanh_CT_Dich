@@ -1,0 +1,5 @@
+kplc: no output file.
+Usage: kplc input output [-dump]
+   input: input kpl program
+   output: executable
+   -dump: code dump
